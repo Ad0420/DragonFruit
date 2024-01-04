@@ -1,0 +1,117 @@
+import cv2
+import numpy as np
+import random
+from matplotlib.path import Path
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+from google.colab.patches import cv2_imshow
+
+def generate_microorganism_blob():
+    n = random.randint(1, 10)
+    r = 0.7
+    scaling_factor = 0.25  # Maximum percentage of image size for the microorganism
+
+    N = n * 3 + 1
+
+    angles = np.linspace(0, 2 * np.pi, N)
+    codes = np.full(N, Path.CURVE4)
+    codes[0] = Path.MOVETO
+
+    verts = np.stack((np.cos(angles), np.sin(angles))).T * (2 * r * np.random.random(N) + 1 - r)[:, None]
+    verts[-1, :] = verts[0, :]
+
+    # Center and scale the microorganism within the image
+    center = np.array([0.5, 0.5])
+    verts = center + (verts - verts.mean(axis=0)) * scaling_factor
+
+    path = Path(verts, codes)
+
+    return path
+
+def plot_microorganism_image():
+    fig, ax = plt.subplots(figsize=(10, 10), dpi=100)  # Adjust figure size and DPI as needed
+    ax.axis('off')
+
+    microorganism_blob = generate_microorganism_blob()
+    patch = patches.PathPatch(microorganism_blob, facecolor='black', lw=2)
+    ax.add_patch(patch)
+
+    plt.savefig('microorganism_image.png', bbox_inches='tight')  # Save the figure
+
+def create_overlay_image(original_image_path, output_path):
+    # Load the original image
+    image = cv2.imread(original_image_path)
+
+    # Convert the image to grayscale
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    # Apply a Gaussian blur to reduce noise and improve edge detection
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+
+    # Use the Canny edge detector to find edges in the image
+    edges = cv2.Canny(blurred, 50, 150)
+
+    # Find contours in the edged image
+    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    # Choose the contour with the largest area (assuming it corresponds to the object)
+    largest_contour = max(contours, key=cv2.contourArea)
+
+    # Get the bounding box coordinates
+    x, y, w, h = cv2.boundingRect(largest_contour)
+
+    # Create a new image with a white background
+    outline_image = np.ones_like(image, dtype=np.uint8) * 255  # White background
+
+    # Fill the specified random portion of the bounding box with green
+    green_color = (0, 255, 0)  # Green color in BGR format
+    fill_area = int(0.09 * w * h)
+
+    # Randomly select pixels to fill with green
+    indices = np.random.choice(w * h, fill_area, replace=False)
+    row_indices, col_indices = np.unravel_index(indices, (h, w))
+
+    # Fill selected pixels with green in the bounding box
+    outline_image[y + row_indices, x + col_indices] = green_color
+
+    # Blend the original image with the outline image
+    alpha = 0.5  # Adjust the transparency factor
+    overlay_image = cv2.addWeighted(image, 1 - alpha, outline_image, alpha, 0)
+
+    # Save the result image
+    cv2.imwrite(output_path, overlay_image)
+
+def calculate_coloration_percentage(original_image_path, overlay_image_path):
+    # Load the original and overlay images
+    original_image = cv2.imread(original_image_path)
+    overlay_image = cv2.imread(overlay_image_path)
+
+    # Create binary masks for non-white pixels in the overlay
+    overlay_mask = cv2.cvtColor(overlay_image, cv2.COLOR_BGR2GRAY) < 255
+
+    # Extract green pixels from the overlay image
+    green_pixels = (overlay_image[:,:,1] == 255) & overlay_mask
+
+    # Calculate the number of green pixels in the overlay
+    green_pixel_count = np.count_nonzero(green_pixels)
+
+    # Calculate the total number of non-white pixels in the overlay
+    non_white_pixels = np.count_nonzero(overlay_mask)
+
+    # Calculate the percentage of randomized green pixels
+    coloration_percentage = (green_pixel_count / non_white_pixels) * 100
+
+    return coloration_percentage
+
+if __name__ == "__main__":
+    plot_microorganism_image()
+
+    original_image_path = 'microorganism_image.png'
+    output_path = 'microorganism_image_overlay.png'
+
+    create_overlay_image(original_image_path, output_path)
+    percentage = calculate_coloration_percentage(original_image_path, output_path)
+    print(f"Percentage of coloration: {percentage:.2f}%")
+
+    overlay_image = cv2.imread(output_path)
+    cv2_imshow(overlay_image)
