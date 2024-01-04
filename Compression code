@@ -1,0 +1,58 @@
+import numpy as np
+import random
+import matplotlib.pyplot as plt
+from matplotlib.path import Path
+import matplotlib.patches as patches
+import time
+from PIL import Image
+
+def generate_microorganism_blob():
+    n = random.randint(1, 10)
+    r = 0.7
+    scaling_factor = 0.25  # Maximum percentage of image size for the microorganism
+
+    N = n * 3 + 1
+
+    angles = np.linspace(0, 2 * np.pi, N)
+    codes = np.full(N, Path.CURVE4)
+    codes[0] = Path.MOVETO
+
+    verts = np.stack((np.cos(angles), np.sin(angles))).T * (2 * r * np.random.random(N) + 1 - r)[:, None]
+    verts[-1, :] = verts[0, :]
+
+    # Center and scale the microorganism within the image
+    center = np.array([0.5, 0.5])
+    verts = center + (verts - verts.mean(axis=0)) * scaling_factor
+
+    path = Path(verts, codes)
+
+    return path
+
+# creating chunks and then adding together as image size too big
+def plot_and_compress_microorganism_image(chunk_size=(5000, 5000), total_size=(100000, 100000), compression_type='png'):
+    start_time = time.time()
+
+    fig, ax = plt.subplots(figsize=(chunk_size[0] / 100, chunk_size[1] / 100), dpi=100)
+    ax.set_xlim(0, chunk_size[0])
+    ax.set_ylim(0, chunk_size[1])
+    ax.axis('off')
+
+    num_rows = total_size[0] // chunk_size[0]
+    num_cols = total_size[1] // chunk_size[1]
+
+    for row in range(num_rows):
+        for col in range(num_cols):
+            microorganism_blob = generate_microorganism_blob()
+            patch = patches.PathPatch(microorganism_blob, facecolor='black', lw=2)
+            ax.add_patch(patch)
+
+            output_filename = f'microorganism_chunk_{row}_{col}.{compression_type}'
+            plt.savefig(output_filename, bbox_inches='tight', format=compression_type, pad_inches=0)
+            plt.cla()  # Clear the axis for the next chunk
+
+    end_time = time.time()
+    runtime = end_time - start_time
+    print(f"Runtime for {compression_type.upper()} compression: {runtime} seconds")
+
+# Generate, compress, and measure runtime for a single microorganism image using PNG compression
+plot_and_compress_microorganism_image(compression_type='png')
